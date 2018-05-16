@@ -40,7 +40,7 @@ def run_cmd(argvs):
     category = argvs[3]
     host = "centos_{0}".format(i_piece)
     file = os.path.basename(file)
-    cmd = "ssh {0} \"python {1}/run_job_each_host.py {2}/{3} {4} {5} >> {6} 2>&1 \" ".format(host, config.bin_dir, config.input_dir, file, category, der_arg, config.log_file)
+    cmd = "ssh {0} \"python {1}/run_job_each_host.py {2}/{3} {4} {5} > {6} 2>&1 \" ".format(host, config.bin_dir, config.input_dir, file, category, der_arg, config.log_file)
     print cmd
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, \
                         stderr=subprocess.STDOUT, shell=True)

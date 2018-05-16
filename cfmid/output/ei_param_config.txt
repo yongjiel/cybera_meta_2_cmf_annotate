@@ -9,7 +9,7 @@ ionization_mode 3
 abs_mass_tol 0.5
 use_lbfgs_for_ga 1
 ga_converge_thresh 0.0001
-include_isotopes 1
+include_isotopes 0
 em_init_type 3
 fg_depth 2
 allow_frag_detours 0

@@ -42,10 +42,11 @@ def jobs(argvs):
             print >> sys.stderr, "Bypass " + remote_file
             continue
         #print >> sys.stderr, "Run " + remote_file
-        param_file, config_file = get_param_config_files(c)
-        
-        output_file, cmd, out, timeout = run_docker(file, out_dir, smiles, c, param_file, config_file)
-        
+        config_file = get_param_config_files(c)
+        ts = time.time()
+        output_file, cmd, out, timeout = run_docker(file, out_dir, smiles, c, config_file)
+        ts1 = time.time()
+        print "Took {0} seconds to get docker done!".format(ts1-ts)
         file_to_master_host = decide_file_to_master_node(output_file, der_arg, out_dir, basename, c, cmd, out, timeout)
 
         # transfer back to master host
@@ -100,7 +101,11 @@ def decide_file_to_master_node(output_file, der_arg, out_dir, base_name, c, cmd,
     file_to_master_host = ''
     base_name = re.sub(r'\..*?$', '', base_name)
     # if failed, generate fail file
-    if not os.path.isfile(output_file) or os.stat(output_file).st_size == 0:
+    if os.path.exists(output_file):
+        print  "{0} file exists!".format(output_file)
+    else:
+        print  "{0} file NOT exists!".format(output_file)
+    if (not os.path.exists(output_file)) or os.stat(output_file).st_size == 0:
         if not der_arg:
             fail_file = "{0}/{1}/{2}".format(out_dir, c, "{0}.fail".format(base_name))
         else:
@@ -114,18 +119,19 @@ def decide_file_to_master_node(output_file, der_arg, out_dir, base_name, c, cmd,
         file_to_master_host = fail_file
     else:
         file_to_master_host = output_file
+    print "{0} file will be transferred to head node!".format(file_to_master_host)
     return file_to_master_host
 
 
-def run_docker(file, out_dir, smiles, c, param_file, config_file):
+def run_docker(file, out_dir, smiles, c, config_file):
     file = os.path.basename(file) 
     base_name = "{0}.log".format(file) 
     output_file = "{0}/{1}/{2}".format(out_dir, c, base_name)  
     cmd = ("docker run --rm=true -v {0}:/root " + " -v {1}:/root/files "
          "-i cfmid:latest sh -c \"cd /root/; cfm-annotate " +
          "'{2}' /root/files/{3} '' 10.0 0.01 {4} {5} {6}/{7};" +
-         " chmod 777 /root/{6}/{7}; exit\" ").format(out_dir, config.input_files_dir, \
-                smiles, file, param_file, config_file, c, base_name)
+         " chmod 777 /root/{6}/{7}\" ").format(out_dir, config.input_files_dir, \
+                smiles, file, 'none', config_file, c, base_name)
     print cmd
     sys.stdout.flush()
     x = config.timeout * 60 
@@ -136,14 +142,21 @@ def run_docker(file, out_dir, smiles, c, param_file, config_file):
     while p.poll() is None and timeout > 0:
         time.sleep(delay)
         if os.path.isfile(output_file):
-            timeout = 0
+            break
         else:
-            timeout -= delay
-    #p.wait()
+            timeout -= 1
+    if os.path.isfile(output_file):
+        print "File {0} exists!".format(output_file)
+    else:
+        print "File {0} NOT exists!".format(output_file)
+    print "Docker does exist now!!!! timeout= {0}, pollisnone={1}".format(timeout, p.poll() is None)
+    sys.stdout.flush()
+    #time.sleep(10)
     if timeout == 0:
         p.kill()
         # the above just kill 'docker run', the below will kill the exec in docker container.
-        cmd = "ps aux|grep '.:.. cfm-'|grep {0}|tr -s ' '|cut -d ' ' -f 2|xargs sudo kill -9 ".format(file)
+        cmd = "ps aux|grep '.:.. cfm-annotate'|grep {0}|tr -s ' '|cut -d ' ' -f 2|xargs -I {} sudo kill -9 {}".format(file)
+        print cmd
         p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE, \
                 stderr=subprocess.STDOUT, shell=True)  
         p1.wait()
@@ -155,18 +168,14 @@ def run_docker(file, out_dir, smiles, c, param_file, config_file):
 
 
 def get_param_config_files(c):
-    param_file = ''
     config_file = ''
     if c == 'positive':
-        param_file = "/root/param_output0.log"
         config_file = "/root/param_config.txt"
     elif c == 'negative':
-        param_file = "/root/negative_param_output0.log"
         config_file = "/root/negative_param_config.txt"
     elif c == 'ei':
-        param_file = "/root/ei_param_output.log"
         config_file = "/root/ei_param_config.txt"
-    return param_file, config_file
+    return  config_file
 
 
 def check_exist_in_master_node(remote_file):
@@ -190,6 +199,7 @@ def run_jobs(input_file, pieces, der_arg, category):
         argvs.append((file, der_arg, category))
     p = Pool(pieces)
     print argvs
+    sys.stdout.flush()
     p.map(jobs, argvs)
     p.close()
     p.join()
@@ -220,6 +230,7 @@ def scp_files_into_child(input_file):
             exit(-1)
 
 def main():
+    ts = time.time()
     der_arg, input_file, category = get_args("run_job_each_host.py")
     print "python ../bin/run_job_each_host.py {0} {1} {2}".format(input_file, category, der_arg)
     input_file  = "{0}/{1}".format(config.input_dir, os.path.basename(input_file)) 
@@ -227,6 +238,8 @@ def main():
     pieces = split_input_file(input_file, config.pieces_in_each_host)
     print "Pieces {0}".format(pieces)
     run_jobs(input_file, pieces, der_arg, category)
+    ts2 = time.time()
+    print "Took {0} seconds!".format(ts2-ts)
     print "Program exit!"
 
 if __name__ == "__main__":
